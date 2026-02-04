@@ -14,7 +14,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       pickupLocation,
+      pickupLat,
+      pickupLng,
       dropLocation,
+      dropLat,
+      dropLng,
       truckType,
       loadType,
       loadWeight,
@@ -37,7 +41,11 @@ export async function POST(request: NextRequest) {
         bookingNumber,
         customerId: session.user.id,
         pickupLocation,
+        pickupLat,
+        pickupLng,
         dropLocation,
+        dropLat,
+        dropLng,
         truckType,
         loadType,
         loadWeight: loadWeight ? parseFloat(loadWeight) : null,

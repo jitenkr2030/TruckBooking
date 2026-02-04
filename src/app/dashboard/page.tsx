@@ -160,8 +160,8 @@ export default function DashboardPage() {
                 <Button onClick={() => window.location.href = '/admin/bookings'}>
                   Manage Bookings
                 </Button>
-                <Button onClick={() => window.location.href = '/admin/pricing'}>
-                  Pricing Rules
+                <Button onClick={() => window.location.href = '/admin/analytics'}>
+                  Analytics
                 </Button>
               </div>
             </CardContent>

@@ -10,12 +10,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { LocationPicker, GoogleMap } from '@/components/google-maps'
 import { MapPin, Calendar, Package, Calculator, Truck, Clock } from 'lucide-react'
+import { PaymentForm } from '@/components/payment-form'
 import { toast } from 'sonner'
 
 interface BookingData {
   pickupLocation: string
+  pickupLat: number
+  pickupLng: number
   dropLocation: string
+  dropLat: number
+  dropLng: number
   truckType: string
   loadType: string
   loadWeight: string
@@ -37,9 +43,15 @@ export function BookingForm() {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
   const [estimate, setEstimate] = useState<FareEstimate | null>(null)
+  const [showPayment, setShowPayment] = useState(false)
+  const [createdBooking, setCreatedBooking] = useState<any>(null)
   const [bookingData, setBookingData] = useState<BookingData>({
     pickupLocation: '',
+    pickupLat: 0,
+    pickupLng: 0,
     dropLocation: '',
+    dropLat: 0,
+    dropLng: 0,
     truckType: '',
     loadType: '',
     loadWeight: '',
@@ -144,19 +156,10 @@ export function BookingForm() {
       })
 
       if (response.ok) {
-        toast.success('Booking confirmed! Driver will be assigned soon.')
-        // Reset form
-        setBookingData({
-          pickupLocation: '',
-          dropLocation: '',
-          truckType: '',
-          loadType: '',
-          loadWeight: '',
-          scheduledDate: '',
-          scheduledTime: '',
-          specialInstructions: ''
-        })
-        setEstimate(null)
+        const result = await response.json()
+        setCreatedBooking(result.booking)
+        setShowPayment(true)
+        toast.success('Booking created! Please complete payment to confirm.')
       } else {
         throw new Error('Booking failed')
       }
@@ -167,35 +170,81 @@ export function BookingForm() {
     }
   }
 
+  const handlePaymentSuccess = () => {
+    setShowPayment(false)
+    // Reset form
+    setBookingData({
+      pickupLocation: '',
+      pickupLat: 0,
+      pickupLng: 0,
+      dropLocation: '',
+      dropLat: 0,
+      dropLng: 0,
+      truckType: '',
+      loadType: '',
+      loadWeight: '',
+      scheduledDate: '',
+      scheduledTime: '',
+      specialInstructions: ''
+    })
+    setEstimate(null)
+    setCreatedBooking(null)
+    toast.success('Booking confirmed! Driver will be assigned soon.')
+  }
+
+  const handlePaymentCancel = () => {
+    setShowPayment(false)
+    toast.info('Payment cancelled. You can complete payment later from your dashboard.')
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="pickup" className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            Pickup Location
-          </Label>
-          <Input
-            id="pickup"
-            placeholder="Enter pickup address"
-            value={bookingData.pickupLocation}
-            onChange={(e) => setBookingData(prev => ({ ...prev, pickupLocation: e.target.value }))}
-          />
-        </div>
+        <LocationPicker
+          label="Pickup Location"
+          value={bookingData.pickupLocation}
+          onChange={(location) => setBookingData(prev => ({ 
+            ...prev, 
+            pickupLocation: location.address,
+            pickupLat: location.lat,
+            pickupLng: location.lng
+          }))}
+          placeholder="Enter pickup address"
+        />
 
-        <div className="space-y-2">
-          <Label htmlFor="drop" className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            Drop Location
-          </Label>
-          <Input
-            id="drop"
-            placeholder="Enter drop address"
-            value={bookingData.dropLocation}
-            onChange={(e) => setBookingData(prev => ({ ...prev, dropLocation: e.target.value }))}
-          />
-        </div>
+        <LocationPicker
+          label="Drop Location"
+          value={bookingData.dropLocation}
+          onChange={(location) => setBookingData(prev => ({ 
+            ...prev, 
+            dropLocation: location.address,
+            dropLat: location.lat,
+            dropLng: location.lng
+          }))}
+          placeholder="Enter drop address"
+        />
       </div>
+
+      {/* Map Display */}
+      {(bookingData.pickupLat && bookingData.dropLat) && (
+        <div className="mt-4">
+          <Label className="text-sm font-medium">Route Preview</Label>
+          <div className="mt-2">
+            <GoogleMap 
+              pickup={{
+                address: bookingData.pickupLocation,
+                lat: bookingData.pickupLat,
+                lng: bookingData.pickupLng
+              }}
+              drop={{
+                address: bookingData.dropLocation,
+                lat: bookingData.dropLat,
+                lng: bookingData.dropLng
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -353,10 +402,22 @@ export function BookingForm() {
               className="w-full mt-4"
               size="lg"
             >
-              {loading ? 'Creating Booking...' : 'Confirm Booking'}
+              {loading ? 'Creating Booking...' : 'Proceed to Payment'}
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Payment Modal */}
+      {showPayment && createdBooking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <PaymentForm
+            amount={estimate!.totalFare}
+            bookingId={createdBooking.id}
+            onSuccess={handlePaymentSuccess}
+            onCancel={handlePaymentCancel}
+          />
+        </div>
       )}
     </div>
   )
