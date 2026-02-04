@@ -13,20 +13,256 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  ADMIN
 }
 
-model Post {
+enum TruckType {
+  MINI
+  FT_14
+  FT_20
+  FT_32
+  CONTAINER
+  OPEN
+  CLOSED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentMethod {
+  UPI
+  WALLET
+  CARD
+  CASH
+  CORPORATE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String?   @unique
+  phone        String    @unique
+  name         String?
+  role         UserRole  @default(CUSTOMER)
+  isVerified   Boolean   @default(false)
+  isKycVerified Boolean  @default(false)
+  avatar       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Customer specific
+  customerBookings Booking[]
+
+  // Driver specific
+  driverProfile    DriverProfile?
+  driverBookings   Booking[]       @relation("DriverBookings")
+  earnings         Earning[]
+
+  // Admin specific
+  adminActions     AdminAction[]
+
+  @@map("users")
+}
+
+model DriverProfile {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  licenseNumber   String?
+  licenseExpiry   DateTime?
+  rcNumber        String?
+  insuranceNumber String?
+  insuranceExpiry DateTime?
+  permitNumber    String?
+  bankAccount     String?
+  bankIfsc        String?
+  isOnline        Boolean @default(false)
+  currentLocation String?
+  preferredRoutes String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trucks   Truck[]
+  ratings  Rating[]
+
+  @@map("driver_profiles")
+}
+
+model Truck {
+  id           String     @id @default(cuid())
+  driverId     String
+  truckNumber  String     @unique
+  type         TruckType
+  capacity     Float      // in tons
+  dimensions   String?    // LxWxH in feet
+  make         String?
+  model        String?
+  year         Int?
+  isAvailable  Boolean    @default(true)
+  currentLocation String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  driver   DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("trucks")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  bookingNumber   String        @unique
+  customerId      String
+  driverId        String?
+  truckId         String?
+  pickupLocation  String
+  pickupLat       Float?
+  pickupLng       Float?
+  dropLocation    String
+  dropLat         Float?
+  dropLng         Float?
+  truckType       TruckType
+  loadType        String?
+  loadWeight      Float?        // in tons
+  scheduledDate   DateTime
+  estimatedDistance Float?      // in km
+  baseFare        Float
+  tollCharges     Float         @default(0)
+  fuelSurcharge   Float         @default(0)
+  gstAmount       Float         @default(0)
+  totalFare       Float
+  status          BookingStatus @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   PaymentMethod?
+  specialInstructions String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer      User          @relation(fields: [customerId], references: [id])
+  driver        User?         @relation("DriverBookings", fields: [driverId], references: [id])
+  truck         Truck?        @relation(fields: [truckId], references: [id])
+  payments      Payment[]
+  tracking      Tracking[]
+  ratings       Rating[]
+  communications Communication[]
+
+  @@map("bookings")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  bookingId     String
+  amount        Float
+  paymentMethod PaymentMethod
+  transactionId String?       @unique
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Tracking {
+  id          String   @id @default(cuid())
+  bookingId   String
+  driverId    String
+  latitude    Float
+  longitude   Float
+  timestamp   DateTime @default(now())
+  speed       Float?
+  heading     Float?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("tracking")
+}
+
+model Rating {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  bookingId String   @unique
+  driverId  String
+  customerId String
+  rating    Int      // 1-5 stars
+  comment   String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  driver DriverProfile @relation(fields: [driverId], references: [id])
+  booking Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("ratings")
+}
+
+model Communication {
+  id        String   @id @default(cuid())
+  bookingId String
+  senderId  String
+  message   String
+  type      String   // 'chat' or 'system'
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("communications")
+}
+
+model Earning {
+  id          String   @id @default(cuid())
+  driverId    String
+  bookingId   String   @unique
+  amount      Float
+  commission  Float
+  netEarning  Float
+  earnedAt    DateTime @default(now())
+
+  driver User @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@map("earnings")
+}
+
+model AdminAction {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  targetId    String?
+  targetType  String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@map("admin_actions")
+}
+
+model PricingRule {
+  id             String   @id @default(cuid())
+  truckType      TruckType
+  baseRate       Float    // per km
+  minimumFare    Float
+  perKmRate      Float
+  tollCharge     Float
+  fuelSurcharge  Float    // percentage
+  gstRate        Float    // percentage
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("pricing_rules")
 }
